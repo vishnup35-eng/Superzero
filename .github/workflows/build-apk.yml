@@ -1,0 +1,68 @@
+name: Build Tamil2English Keyboard APK
+
+# Runs on GitHub's free servers. Works in two situations:
+#  1) you uploaded the project folder files normally, or
+#  2) you uploaded ONE file: Tamil2EnglishKeyboard.zip (easiest from a phone).
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish the APK as a GitHub Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack any uploaded .zip
+        run: |
+          shopt -s nullglob
+          for z in *.zip; do
+            echo "Unpacking $z"
+            unzip -q -o "$z" -d _unzipped
+          done
+
+      - name: Locate the Android project
+        id: find
+        run: |
+          SETTINGS=$(find . -name settings.gradle.kts -not -path "./.git/*" | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle.kts not found. Upload Tamil2EnglishKeyboard.zip to the repository root."
+            exit 1
+          fi
+          echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
+          echo "Project directory: $(dirname "$SETTINGS")"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Build debug APK
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: gradle --no-daemon assembleDebug
+
+      - name: Collect APK
+        run: cp "${{ steps.find.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" Tamil2English-Keyboard.apk
+
+      - name: Keep APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tamil2English-Keyboard-APK
+          path: Tamil2English-Keyboard.apk
+
+      - name: Publish APK as a Release (direct .apk download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Tamil2English Keyboard build ${{ github.run_number }}
+          files: Tamil2English-Keyboard.apk
